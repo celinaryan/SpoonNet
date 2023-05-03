@@ -250,19 +250,7 @@ class SpoonsClient:
 				self.grab_spoon()
 			else: # keep playing
 				return
-			# print('before')
-			# data, addr = self.spoon_sock.recvfrom(1024)
-			# print('after')
 
-			# server_ack = json.loads(msg)
-			# status = server_ack['status']
-			# if status == 'success':
-			#     if server_ack['spoons_left'] == 0:
-			#         print("You got the last spoon. You win!!")
-			#     else:
-			#         print("You successfully grabbed a spoon!\nWait for the other players to grab the spoons for the next round.")
-				## print whether eliminated or moving on
-				##return resp
 		
 	   
 
@@ -309,50 +297,9 @@ class SpoonsClient:
 		msg = msg.encode()
 		self.writer.write(length + msg)
 		await self.writer.drain()
-		# self.send_retries = 0
-		# bytes_sent = 0
-		# while(True):
-		#     try:
-		#         self.writer.write(str(len(msg.encode())).encode() + msg.encode())
-		#         bytes_sent = self.s.send(str(len(msg.encode())).encode() + msg.encode())
-		#     except Exception as e:
-		#         print('Connection to server lost. Restarting connection.')
-		#         self.s.close()
-		#         self.connect_to_server()
-		#         continue
-
-		#     if bytes_sent == 0:
-		#         print('Failed to send request to server. Restarting connection.')
-		#         self.s.close()
-		#         self.connect_to_server()
-		#         time.sleep(2**self.send_retries)
-		#         self.send_retries+=1
-		#     else:
-		#         break
+		
 
 	async def recv_resp(self, msg):
-		# self.recv_retries = 0
-		# bytes_recv = 0
-
-		# while(True):
-		#     try:
-		#         resp = json.loads(self.s.recv(4096).decode())
-		#     except Exception as e:
-		#         print('Connection lost. Restarting connection.')
-		#         self.s.close()
-		#         self.connect_to_server()
-		#         self.send_request(msg)
-		#         continue
-
-		#     if len(resp) == 0 or resp == -1:
-		#         print('Failed to receive response from server. Restarting connection.')
-		#         self.s.close()
-		#         self.connect_to_server()
-		#         self.send_request(msg)
-		#         time.sleep(2**self.recv_retries)
-		#         self.recv_retries+=1
-		#     else:
-		#         break
 		data = await self.reader.read(4096)
 		resp = json.loads(data.decode())
 		#print(f"Got response: {resp}")
