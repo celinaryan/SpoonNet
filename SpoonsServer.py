@@ -14,9 +14,7 @@ class SimpleUDPProtocol(asyncio.DatagramProtocol):
 
 	def datagram_received(self, data, addr):
 		text = data.decode("utf-8").strip()
-		# May want to error check this
 		response = json.loads(text)
-		# Name server doesnt send anything back, shouldnt get anything here lol
 		print(f"Received from Name Server: {response}")
 
 class SpoonsServer:
@@ -24,7 +22,6 @@ class SpoonsServer:
 		self.port                = 9001
 		self.game_name           = game_name
 		self.last_sent           = 0
-		# TODO: Spoon count was never set?
 		self.spoons              = 3
 		self.BroadCastQueue      = []
 		self.grab_time_stamp     = {}
@@ -41,32 +38,21 @@ class SpoonsServer:
 		self.host = None
 	
 	async def run(self):
-		'''
-		Initilizes the master socket and name server socket
-		'''
+		# init name server socket and main socket
 		await self.init_name_server()
-		#await self.init_spoon_broadcast()
 		await self.init_server()
 	
 	def schedule_udp(self):
-		'''
-		Sends a UDP message to the name server every 60 seconds
-		TODO: Change the time amount to whatever
-		'''
+		# send UDP msg to name server every 60 seconds
 		num_sec = 60
 		asyncio.ensure_future(self.send_udp())
 		loop = asyncio.get_event_loop()
 		loop.call_later(num_sec, self.schedule_udp)
 		 
 	async def init_server(self):
-		'''
-		Inits the server
-		TODO: Change ip and port to whatever you want
-		'''
 		self.game_init_time = time.time_ns()
 		self.game_over = 0
 		server = await asyncio.start_server(self.handle_client, '127.0.0.1', self.port)
-		# Set host name to the ip address
 		self.host = server.sockets[0].getsockname()[0]
 		print(f"Listening on {self.host}:{self.port}")
 		self.schedule_udp()
@@ -74,51 +60,28 @@ class SpoonsServer:
 			await server.serve_forever()
 
 	async def handle_client(self, reader, writer):
-		'''
-		Handler function that runs every time a client sends something to the server. Just using client filno
-		as the "new_player" you were using in your old code - can change to something else.
-
-		TODO: Should probably add something here for if a game has already started
-				1. Send a reject message to client saying a game is already in session
-				2. Start another game w/ new set of clients (possible since game is running asynchronously)
-		'''
+		# handle client each time one sends a request
 		client_addr   = writer.get_extra_info("peername")
 		client_fileno = writer.get_extra_info("socket").fileno()
-		print("Client connected from", client_addr)
-		# Change byte amount however you set it up
+
 		while True:
 			bytes_to_read = await reader.read(2)
 			bytes_to_read = int.from_bytes(bytes_to_read, byteorder="big")
-			print(f"Reading {bytes_to_read} bytes from client {client_fileno}")
 			data = await reader.read(bytes_to_read)
-			print(f" data {data}")
-			print(f" data type {type(data)}")
 			msg  = data.decode("utf-8")
 			
-			print(f" msg {msg}")
-			print(f" msg type {type(msg)}")
-			print(f"Got message from client: {msg}")
 			await self.execute_msg(client_fileno, client_addr, writer, msg)
 		await writer.wait_closed()
 
 	async def init_name_server(self):
-		'''
-		Initializes the name server UDP socket, setting up the transport (socket) and protocol
-		'''
+		# init the name server socket
 		loop = asyncio.get_event_loop()
 		remote_addr=(socket.gethostbyname('catalog.cse.nd.edu'), 9097)
 		listen = loop.create_datagram_endpoint(lambda: SimpleUDPProtocol(), remote_addr=remote_addr)
 		self.transport, self.protocol = await listen
 
-	# async def init_spoon_broadcast(self):
-	# 	loop = asyncio.get_event_loop()
-	# 	remote_addr=('0.0.0.0', 9004)
-	# 	listen = loop.create_datagram_endpoint(lambda: SimpleUDPProtocol(), remote_addr=remote_addr)
-	# 	self.spoon_transport, self.spoon_protocol = await listen
-
-
 	async def init_game(self):
-		# Send a "start_game" to all users
+		# send a "start_game" to all users
 		tasks = []
 		msg = json.dumps({"method": "start_game"})
 		for player in self.players_info:
@@ -129,16 +92,8 @@ class SpoonsServer:
 		self.deal_cards()
 		self.players_info[self.players[0]]['pickup_deck'] = self.deck.remaining_cards
 
-		###### TAKE OUT AFTER DEBUGGING ######
-		self.players_info[self.players[0]]['cards'] = ['4H', '4D', '4S', '4C']
-		######################################
-
-		# Set pickup pile of player #0 to be remaining_cards in deck object
+		# set pickup pile of player #0 to be remaining_cards in deck object
 		self.players_info[self.players[0]]['pickup_deck'] = self.deck.remaining_cards
-		# await self.play_game()
-
-	# async def play_game(self):
-	# 	# Run the game until someone wins
 
 	# adds a player to player_info and intiializes it's values
 	def init_player_info(self, player, num, writer):
@@ -157,19 +112,16 @@ class SpoonsServer:
 		try:
 			msg = json.loads(msg)
 		except:
-			print(type(msg))
-		print(f"Got message from client: {msg}")
+			pass
 		method = msg['method']
 
 		if method == "join_game":
 			# Handle if game already started...
 			if self.num_players +1 > self.expected_players:
-				print("Game already started, sending reject message")
 				resp = { 'method': 'join_game', 'status': 'reject', 'reason': 'game_already_started' }
 				writer.write(json.dumps(resp).encode('utf-8'))
 				await writer.drain()
 				return
-			print(f"New Player: {player}, Address: {player_addr}")
 			self.init_player_info(player, self.num_players, writer)
 			self.players.append(player)
 			print(f"\tPlayer {self.num_players} joined!")
@@ -178,7 +130,6 @@ class SpoonsServer:
 
 			# If there is an expected # of players, start running the game in the background
 			self.num_players += 1
-			print(f"Num Players: {self.num_players}, Expected Players: {self.expected_players}")
 			if self.num_players  >= self.expected_players:
 				print("Starting game...")
 				asyncio.ensure_future(self.init_game())
@@ -220,7 +171,6 @@ class SpoonsServer:
 			# else into next player's pickup deck
 			else:
 				self.players_info[self.players[next_ind]]['pickup_deck'].append(msg['card'])
-				print('adding to player', next_ind, 'pile')
 			resp = { 'method': 'discard', 'result': 'success' }
 			
 		elif method == 'grab_spoon':  
@@ -235,33 +185,21 @@ class SpoonsServer:
 			
 	async def spoons_thread(self, player, msg):
 		# first spoon is grabbed
-		print('HERE2')
-		print('spoons:', self.num_spoons)
-		print('players:', self.num_players)
+
 		if self.num_spoons == self.num_players - 1: # need to broadcast to everyone else to get spoon, and that first grabber got it
-			print('HERE1')
 			msg = {'method': "grab spoon"}
-			#self.spoon_transport.sendto(json.dumps(msg).encode())
 			self.last_sent = time.time_ns()
-
-
-
-			# self.time_spoon_grabbed = float(msg["time"])
 			self.num_spoons -= 1
 			
 			self.players_info[player['writer'].get_extra_info("socket").fileno()]["spoon_grabbed"] = 1
-			# self.players_info[player]["grab_time_stamp"] = self.time_spoon_grabbed
 			self.first_spoon_grabbed = 1
 			if self.num_players>2:
 				ack_msg = {'method': "grab_spoon", 'status': 'success','result': 'next_round','spoons_left': self.num_spoons}
 			else:
 				ack_msg = {'method': "grab_spoon", 'status': 'success','result': 'game_over'}
 			response = json.dumps(ack_msg)
-			#self.grab_time_stamp[player['writer'].get_extra_info("socket").fileno()] = self.time_spoon_grabbed
 			await self.send_msg(player['writer'].get_extra_info("socket").fileno(), response)
 			
-
-
 			tasks = []
 			for p in self.players_info:
 				if not self.players_info[p]["spoon_grabbed"]:
@@ -279,6 +217,7 @@ class SpoonsServer:
 			ack_msg = {'method': "grab_spoon", 'status': 'success','spoons_left': self.num_spoons}
 			response = json.dumps(ack_msg)
 			await self.send_msg(player, response)
+
 		# No spoons left, player is eliminated
 		else:
 			# send message to player that they are eliminated and that new round is starting
@@ -304,8 +243,6 @@ class SpoonsServer:
 			
 
 	async def send_msg(self, player, msg):
-		print('\n\nPLAYERS INFO:::', self.players_info)
-		print('\n\nPLAYER :::', player)
 		writer = self.players_info[player]["writer"]
 		writer.write(msg.encode())
 		await writer.drain()
@@ -320,31 +257,22 @@ class SpoonsServer:
 		self.timeSpoonGrabbed = -1
 		self.first_spoon_grabbed = 0
 		self.remaining_cards = []
-		#self.deal_cards()
+		self.deal_cards()
 		self.first_spoon_grabbed = 0
 		self.num_spoons = self.num_players - 1
 
-		print("Starting next round with ", self.num_players, "players")
 		for i, player in enumerate(self.players):
-			print('PLAYER:::', player)
-			print('PLAYERS INFO:::', self.players_info)
 			self.init_player_info(player, i, self.players_info[player]['writer'].get_extra_info("socket").fileno())
 		print("Starting next round...")
 		asyncio.ensure_future(self.init_game())
-		
 
 	def deal_cards(self):
 		hands = self.deck.deal_cards(self.num_players)
 		for i, player in enumerate(self.players_info.values()):
 			player['cards'] = hands[i]
 
-			
 	async def send_udp(self):
-		'''
-		Sends a UDP message to the name server
-		'''
-		print("sending to name server")
-		
+		# send UDP msg to name server		
 		msg = { "type" : "hashtable", "owner" : "mnovak5", "host": self.host, "port" : self.port, "game_name" : self.game_name }
 		self.transport.sendto(json.dumps(msg).encode())
 		self.last_sent = time.time_ns()
